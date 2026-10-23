@@ -34,6 +34,11 @@ def fully_define_sketch(model):
     """@brief 以原点为尺寸基准补全草图，禁止用 Fix 代替设计参数。
     @param model 处于草图编辑态的 IModelDoc2。
     @return 实际回读证据；无法取得明确通过证据时抛出异常。
+
+    @note SW2025 实测本函数需要**连续跑两遍**才收干净：第一遍补端点合并等
+          几何关系，第二遍才补驱动尺寸。调用方应按
+          `ISketch::GetConstrainedStatus`（2=欠定义，3=完全定义）自行决定
+          是否再跑一遍；仍欠定义时可用 `ISketch::AutoDimension2` 兜底。
     """
     active = get_com_member(model.SketchManager, "ActiveSketch")
     if active is None:

@@ -13,7 +13,9 @@ SolidWorks 语义选边工具。
     along_z     是否为平行于 Z 轴的竖直边
     circular    是否为圆边（配合 hole/min_diameter 用来选孔的入口边）
     diameter_mm 圆边直径（与 tolerance_mm 配合）
-    position_mm 边中点必须靠近的坐标（配合 position_tolerance_mm）
+    position_mm 边中点必须靠近的坐标（配合 position_tolerance_mm；
+                圆边的"中点"取**圆心**——SW2025 下整圆无端点顶点、
+                GetCurveParams2 排列与假设不符，圆心改从 ICurve::CircleParams 读）
     convex_only 只保留凸边（外轮廓），用于外圆角
     concave_only 只保留凹边（内角），用于内圆角
 """
@@ -104,6 +106,26 @@ def describe_edge(edge, index=0):
         descriptor["is_circle"] = bool(_safe(curve, "IsCircle"))
     except Exception as exc:
         descriptor["errors"].append(f"读取曲线类型失败: {exc}")
+
+    # SW2025 实测：整圆边的 GetStartVertex/GetEndVertex 返回 None、GetLength 恒 0，
+    # 且 GetCurveParams2 的排列并非"圆心+轴向+半径"（前三项是圆上一点、第 8 项是 2π），
+    # 因而下方的 params[6] 直径启发式在 2025 上永远取不到值。
+    # 圆边定位一律走 ICurve::CircleParams（返回 cx,cy,cz, ax,ay,az, r，米制）。
+    if descriptor["is_circle"]:
+        try:
+            circle_params = list(
+                get_com_member(get_com_member(edge, "GetCurve"), "CircleParams") or [])
+            if len(circle_params) >= 7:
+                center_mm = [float(circle_params[i]) * _MM_PER_M for i in range(3)]
+                radius_mm = abs(float(circle_params[6])) * _MM_PER_M
+                descriptor["circle_center_mm"] = [round(v, 6) for v in center_mm]
+                descriptor["circle_radius_mm"] = round(radius_mm, 6)
+                descriptor["diameter_mm"] = round(radius_mm * 2.0, 6)
+                # 圆边没有"中点"概念（整圆无端点顶点），以圆心作为位置锚点，
+                # 让 filter_edges 的 position_mm 对圆边按圆心生效。
+                descriptor["mid_point_mm"] = [round(v, 6) for v in center_mm]
+        except Exception as exc:
+            descriptor["errors"].append(f"CircleParams 读取失败: {exc}")
 
     try:
         descriptor["length_mm"] = round(float(_safe(edge, "GetLength")) * _MM_PER_M, 6)
