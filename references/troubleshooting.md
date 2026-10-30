@@ -261,6 +261,19 @@ Add-Type -Path 'E:\Solidworks\SOLIDWORKS\SolidWorks.Interop.swconst.dll'
 
 稳定写法：使用新版 `sw_assembly.add_mate5_checked()`，它接受 `0` 和 `1` 作为成功码，并仍会检查 Mate 是否为空。
 
+### 重合 Mate 创建成功但零件被翻 180°
+
+场景：同轴心 + 重合 Mate 全部创建成功、零件数/配合数都对，但某块板绕孔轴翻了 180°（凸缘跑到另一侧），外形与图不符。
+
+原因：重合 Mate 的 `align` 用错。`swMateAlignALIGNED = 0` 要求两个选中面的**外法向同向**；杆端面贴板面这种“面对面”对接，两法向相反，必须 `swMateAlignANTI_ALIGNED = 1`。
+
+判据：
+
+- 杆端**插入**孔内、端面与孔所在板面平齐 → 两法向同向 → `align=0`；
+- 杆端面**贴**在板的外表面上（Ø15 颈露在板外）→ 两法向相反 → `align=1`。
+
+稳定写法：给每个重合面记录“局部面坐标 + 法向 + align”，建完后回读各组件 `Transform2`，逐位对比设计位姿。
+
 ### 选择集被清空
 
 场景：第一个面选择成功，执行解析组件或切换文档后，第二个面选择成功但 `AddMate5()` 失败。
@@ -404,6 +417,29 @@ if not success:
     # 尝试中文名称
     model.Extension.SelectByID2("前视基准面", "PLANE", 0, 0, 0, False, 0, None, 0)
 ```
+
+### 打开失败：swFileWithSameTitleAlreadyOpen（错误码 65536）
+
+场景：`SolidWorksSession.open()` / `OpenDoc6` 打开零件或装配体时抛：
+
+```text
+SolidWorksDocumentOpenError: 打开失败, 错误码: 65536 (swFileWithSameTitleAlreadyOpen)
+```
+
+原因：SolidWorks 是单实例；用户正开着同名文档（或上一轮脚本没关），会话连的是同一个实例，`OpenDoc6` 不会另开一份。
+
+处理：
+
+```python
+for d in list(get_com_member(app, "GetDocuments") or []):
+    title = get_com_member(d, "GetTitle")
+    if not bool(get_com_member(d, "GetSaveFlag")):   # False = 无未保存修改
+        app.CloseDoc(title)
+```
+
+- 有未保存修改（`GetSaveFlag == True`）时停下来问用户，**绝不替他保存/关闭**；
+- 关掉后重跑，并告知用户“我关掉了你开着的（未修改的）文件”；
+- `SolidWorksSession` 退出时只清理自己登记的文档，用户自己的文档不要动。
 
 ### 保存/导出失败
 
