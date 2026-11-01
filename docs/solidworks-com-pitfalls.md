@@ -421,32 +421,42 @@ PDF 用 Edge headless 时，输出路径用**正斜杠 UNC**（反斜杠会被 b
 验收必须五项齐全：**配合数 + 干涉 + 包围盒 + 6 个 `Transform2` 回读对照 + 与图的同视角对照**。
 缺最后一项，就可能交出一个"合法但不对"的装配。
 
-### 53. "点选只变蓝、不出尺寸" = 文档级显示开关，不是没标注
+### 53. "点选只变蓝、不出尺寸" = 文档级显示开关（但交付文件不要开）
 SolidWorks 里树中 **注解 → 显示注解 / 显示特征尺寸 / 显示参考尺寸** 对应 `swUserPreferenceToggle_e` 的
-**31 / 32 / 33**（尺寸没显示时通常是 32 关着）。
+**31 / 32 / 33**。尺寸没显示时通常是 32 关着：
 
 ```python
 for i in (31, 32, 33):
-    doc.SetUserPreferenceToggle(i, True)      # IModelDoc2
+    doc.SetUserPreferenceToggle(i, True)      # 必须是 IModelDoc2
 doc.Save3(...)                                 # 不保存就不进文件
 ```
 
-- 这是**文档级**选项：`app.SetUserPreferenceToggle(32, True)` 调用不报错，但读回来仍是 `False`，白干。
-- `IAnnotation.Visible` 一直是 `1`，改它没用；显示与否由上面三个开关决定。
-- 打开 32 后所有特征尺寸常驻显示（蓝），不是"只有选中才显示"；要交干净模型时再关回去。
-- 实测对照：32 关 + 选中 `凸台-拉伸1` → 只有蓝色高亮；32 开 → 尺寸文字出现。
+- 这是**文档级**选项：`app.SetUserPreferenceToggle(32, True)` 调用不报错，但读回来还是 `False`，白干。
+- `IAnnotation.Visible` 一直是 `1`，改这个没用；显示与否由上面三个开关决定。
+- ⚠️ **别为了"让用户看见尺寸"给交付文件打开 32**。实测（本项目 2026-11-01，用户当场否掉）：
+  打开后显示的是**特征尺寸在 3D 里的投影**，圆/孔的尺寸**锚不到圆心**——Ø15、R2 的引线落在别处、
+  文字散在模型上、还常被视图裁掉，看着像"标错了"。课程要的"有尺寸"是**工程图（A3）上的尺寸**，
+  不是 3D 常驻尺寸。交付默认保持 32=False（零件模板的 31=True 是出厂状态，不用动）。
+- 正确回答这类需求：讲清"双击特征临时看尺寸 / 右键 注解 → 显示特征尺寸 临时打开"，
+  尺寸以工程图为准；**不要顺手把它写进要交的文件里**。
 
-### 54. 验证"显示类"改动别用抓屏，用 `SaveBMP`
+### 54. 改了"显示状态"也要走交付联动
+显示开关是**存进文件**的：开→保存→文件字节数变（本项目 001 85 661→95 043 B）→提交 zip 立刻过期。
+所以任何非几何改动也要：回读 `GetUserPreferenceToggle` → `GetSaveFlag=False` → **重建 zip** →
+逐文件比对包内大小与磁盘大小。要回退就按记录的原值写回去（别凭印象），本项目原值：
+零件 31=T/32=F/33=T，装配体 31=F/32=F/33=T。
+
+### 55. 验证"显示类"改动别用抓屏，用 `SaveBMP`
 `PIL.ImageGrab` 截 SolidWorks 窗口经常拿到**没重绘的旧帧**（本项目两次不同状态截出逐像素相同的图）。
 让软件自己渲染：`ClearSelection2` → `ViewZoomtofit2` → `GraphicsRedraw2` → sleep 1 s → `doc.SaveBMP(path, w, h)`，
 再用 numpy 差值量化对比（`changed_px`）。
 
-### 55. `SelectByID2` 的 SelData 参数
+### 56. `SelectByID2` 的 SelData 参数
 第 8 个参数（SelData/Callout）传 `None`/`0` 会 `-2147352571 类型不匹配`；用
 `sw_connect.create_empty_dispatch_variant()`（见 `references/troubleshooting.md` 的 SelectByID2 条目）。
 零件里 `("凸台-拉伸1", "BODYFEATURE")` 可选；装配体里 `("弯板-1", "COMPONENT")` 返回 False（组件名写法不同，改用 `SelectByIndex`/鼠标坐标或先 `EditPart`）。
 
-### 56. 不知道 API 叫什么：把类型库 makepy 出来 grep
+### 57. 不知道 API 叫什么：把类型库 makepy 出来 grep
 ```bash
 python -m win32com.client.makepy 'C:\\SOLIDW~2\\SOLIDW~1\\swconst.tlb'   # 枚举表
 python -m win32com.client.makepy 'C:\\SOLIDW~2\\SOLIDW~1\\SldWorks.tlb'  # 全接口 ~10 万行

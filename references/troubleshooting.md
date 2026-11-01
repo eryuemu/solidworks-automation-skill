@@ -862,11 +862,16 @@ for i in (31, 32, 33):
 save_document(model)                          # 不保存就不进文件
 ```
 
+**这只是临时查看手段，不要写进要交付的文件**：打开 32 显示的是特征尺寸在 3D 中的投影，
+圆/孔的尺寸**锚不到圆心**，引线会落在别处、文字散在模型上，看着像标错；课程作业要求的尺寸以
+**工程图**为准。用户问"为什么看不到尺寸"时，先解释双击特征/临时勾选这个开关，再确认工程图有尺寸。
+
 红线：
 - 这是**文档级**选项。`swApp.SetUserPreferenceToggle(32, True)` 不报错，但读回来还是 `False`。
 - 改 `IAnnotation.Visible` 无效，别在这条路上耗时间。
 - 验证显示效果用 `model.SaveBMP(...)`（软件自渲染）；`ImageGrab` 抓 SolidWorks 窗口会拿到没重绘的旧帧。
-- 详见 `docs/solidworks-com-pitfalls.md` 第 53–54 条。
+- 显示状态**存进文件**，改过就要重新打包提交 zip；回退时按记录的原值写回去。
+- 详见 `docs/solidworks-com-pitfalls.md` 第 53–57 条。
 
 ## 版本号对照
 
