@@ -843,6 +843,31 @@ model.EditRebuild3()
 sw.UserControl = True
 ```
 
+## 显示问题
+
+### 选中特征只变蓝，不显示尺寸
+
+模型里点/选一个特征只出现蓝色高亮、看不到尺寸，**不是没标注**（先用 `IFeature.GetFirstDisplayDimension`
+数一下，尺寸对象通常都在、`IAnnotation.Visible` 也一直是 1）。真正的原因是文档级显示开关被关掉：
+
+| 开关 | `swUserPreferenceToggle_e` | 界面位置 |
+|---|---|---|
+| 显示注解 | 31 | 设计树右键 **注解 → 显示注解** |
+| 显示特征尺寸 | 32 | 设计树右键 **注解 → 显示特征尺寸** |
+| 显示参考尺寸 | 33 | 设计树右键 **注解 → 显示参考尺寸** |
+
+```python
+for i in (31, 32, 33):
+    model.SetUserPreferenceToggle(i, True)   # 必须是 IModelDoc2
+save_document(model)                          # 不保存就不进文件
+```
+
+红线：
+- 这是**文档级**选项。`swApp.SetUserPreferenceToggle(32, True)` 不报错，但读回来还是 `False`。
+- 改 `IAnnotation.Visible` 无效，别在这条路上耗时间。
+- 验证显示效果用 `model.SaveBMP(...)`（软件自渲染）；`ImageGrab` 抓 SolidWorks 窗口会拿到没重绘的旧帧。
+- 详见 `docs/solidworks-com-pitfalls.md` 第 53–54 条。
+
 ## 版本号对照
 
 | SolidWorks | 修订号 | ProgID |

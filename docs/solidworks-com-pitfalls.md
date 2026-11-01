@@ -421,3 +421,37 @@ PDF 用 Edge headless 时，输出路径用**正斜杠 UNC**（反斜杠会被 b
 验收必须五项齐全：**配合数 + 干涉 + 包围盒 + 6 个 `Transform2` 回读对照 + 与图的同视角对照**。
 缺最后一项，就可能交出一个"合法但不对"的装配。
 
+### 53. "点选只变蓝、不出尺寸" = 文档级显示开关，不是没标注
+SolidWorks 里树中 **注解 → 显示注解 / 显示特征尺寸 / 显示参考尺寸** 对应 `swUserPreferenceToggle_e` 的
+**31 / 32 / 33**（尺寸没显示时通常是 32 关着）。
+
+```python
+for i in (31, 32, 33):
+    doc.SetUserPreferenceToggle(i, True)      # IModelDoc2
+doc.Save3(...)                                 # 不保存就不进文件
+```
+
+- 这是**文档级**选项：`app.SetUserPreferenceToggle(32, True)` 调用不报错，但读回来仍是 `False`，白干。
+- `IAnnotation.Visible` 一直是 `1`，改它没用；显示与否由上面三个开关决定。
+- 打开 32 后所有特征尺寸常驻显示（蓝），不是"只有选中才显示"；要交干净模型时再关回去。
+- 实测对照：32 关 + 选中 `凸台-拉伸1` → 只有蓝色高亮；32 开 → 尺寸文字出现。
+
+### 54. 验证"显示类"改动别用抓屏，用 `SaveBMP`
+`PIL.ImageGrab` 截 SolidWorks 窗口经常拿到**没重绘的旧帧**（本项目两次不同状态截出逐像素相同的图）。
+让软件自己渲染：`ClearSelection2` → `ViewZoomtofit2` → `GraphicsRedraw2` → sleep 1 s → `doc.SaveBMP(path, w, h)`，
+再用 numpy 差值量化对比（`changed_px`）。
+
+### 55. `SelectByID2` 的 SelData 参数
+第 8 个参数（SelData/Callout）传 `None`/`0` 会 `-2147352571 类型不匹配`；用
+`sw_connect.create_empty_dispatch_variant()`（见 `references/troubleshooting.md` 的 SelectByID2 条目）。
+零件里 `("凸台-拉伸1", "BODYFEATURE")` 可选；装配体里 `("弯板-1", "COMPONENT")` 返回 False（组件名写法不同，改用 `SelectByIndex`/鼠标坐标或先 `EditPart`）。
+
+### 56. 不知道 API 叫什么：把类型库 makepy 出来 grep
+```bash
+python -m win32com.client.makepy 'C:\\SOLIDW~2\\SOLIDW~1\\swconst.tlb'   # 枚举表
+python -m win32com.client.makepy 'C:\\SOLIDW~2\\SOLIDW~1\\SldWorks.tlb'  # 全接口 ~10 万行
+```
+生成在 `%TEMP%\\gen_py\\3.12\\<GUID>x0x33x0.py`，直接 `grep 'swDisplay'` /
+`sed -n '/^class IModelDoc2/,/^class IModelDocExtension/p' | grep 'def .*Display'` 找方法名和参数名，
+比猜 API 名快得多。SolidWorks 安装目录可用 `HKCR\\SldWorks.Application\\CLSID → LocalServer32` 反查。
+
