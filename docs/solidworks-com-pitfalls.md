@@ -465,3 +465,31 @@ python -m win32com.client.makepy 'C:\\SOLIDW~2\\SOLIDW~1\\SldWorks.tlb'  # 全�
 `sed -n '/^class IModelDoc2/,/^class IModelDocExtension/p' | grep 'def .*Display'` 找方法名和参数名，
 比猜 API 名快得多。SolidWorks 安装目录可用 `HKCR\\SldWorks.Application\\CLSID → LocalServer32` 反查。
 
+### 58. ⚠️ 交付包必须做"解压到全新目录再双击打开"的端到端验证
+装配体 `.SLDASM` 里存的是**零件的完整路径**。在 A 目录建的装配，把 zip 解压到 B 目录后，
+SW 先按 A 的绝对路径找零件；能不能回退到"装配体所在目录"取决于路径形态（见第 59 条）。
+本项目 2026-11-03 就交了个"自己机器能开、别人打不开"的包：用户解压后 6 个组件全带⚠️、图形区空白，
+弹窗 `无法找到文件 \\wsl.localhost\...\直杆.SLDPRT`。
+
+**打包后必做的验收（三步都过才算可交付）**：
+1. 把 zip 解压到一个**全新目录**；
+2. 只双击装配体（**不预载零件**）打开，读 `GetComponents` 的 `GetPathName`：6/6 必须落在装配体所在目录；
+3. 包围盒/配合数/干涉与源模型一致（本项目：`[198,242,242]`、10 个配合、干涉 0）。
+只在自己工作目录里打开过，等于没验。
+
+### 59. WSL / UNC 目录里 SolidWorks 不做"同目录回退"
+在 `\\wsl.localhost\...` 这类 UNC 工作目录里：引用指向一个已不存在的本地路径时，组件全部丢失、
+包围盒读成 `[0,0,0]`；把同一套文件放到普通 Windows 目录（`%TEMP%\...`）里打开，SW 会按
+"装配体所在目录 + 同名零件"解析成功。结论：
+- **提交副本一定要在普通 Windows 目录里生成**，别在 WSL/UNC 目录里就地保存后直接打包；
+- 工作目录留在 WSL 没问题（自己用），但交付包是另一份产物；
+- 顺带：只开装配体时是**轻化加载**，`GetComponents` 的 `IsSuppressed` 全 True、包围盒为 0、
+  干涉检查不可信 → 复验前**先预载零件**（或强制全载荷）。
+
+### 60. SW2025 + pywin32 拿不到 `IPackAndGo`，手工 repoint 三步可用
+`sw_delivery.pack_and_go()` 在本机失败：`IModelDocExtension.GetPackAndGo` 三种调用方式都报
+`-2147352561 非选择性的参数`，comtypes 回退又被"父实例 PID 不唯一"门禁拦住。等效的手工做法（已实测有效）：
+1. 把装配体 + 全部零件复制到普通 Windows 目录；
+2. **先 `open_document(零件)`，再 `open_document(装配体)`** —— 组件会认到已打开的同名文档；
+3. 就地 `save_document(装配体)`，引用即改成该目录；再按第 58 条打包+端到端验证。
+
