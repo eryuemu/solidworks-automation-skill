@@ -786,6 +786,30 @@ for d in descs:
 当成 `for edge in iter_model_edges(...)` 用会得到 0 条边且不报错；后续 `fillet()`
 因选择集为空抛“圆角需要先选择边线”，容易误判成“模型里没有可选的边”。
 
+### GetPartBox 对带圆角实体略偏大（约 0.1×R）
+
+场景：凸台上缘倒圆后，`GetPartBox` 读出的外包尺寸比设计值大：R4 的件 120 → 120.79、
+R4.5 的件 140 → 140.89；但把所有顶点扫一遍，没有任何点超出 ±60/±70，模型上也没有凸出。
+两个尺寸的增量 ≈ 0.099×R，来自圆角/环面参与包围盒计算时的保守估计。
+
+处理：
+
+- 含圆角的零件做包围盒验收时留 ~0.1×R 的余量，或改用顶点/面范围复核；
+- 别把这点误差当成“模型超差”，更不要为了它去改几何。
+
+### `\\wsl.localhost` 路径大小写敏感
+
+场景：`SaveAs("...\座体1.sldprt")` 后实际文件名是 `座体1.SLDPRT`；随后
+`os.path.exists("...\座体1.sldprt")` 返回 `False`，`run_review(expected_outputs=[...])`
+报 `expected_outputs_missing`（severity=fail），但文件明明存在（177 KB）。
+
+原因：WSL 的 9p 共享不做 Windows 的大小写折叠；资源管理器里看不出来，Python 按字面匹配。
+
+处理：
+
+- `expected_outputs` 和存在性检查用保存后的真实扩展名（`.SLDPRT`/`.step`），或 `glob` 匹配；
+- 交付前 `ls`/`Get-ChildItem` 核对真实文件名，别只看代码里的字符串。
+
 ### 特征返回值判空而不是判真
 
 SolidWorks 大多数特征 API 在失败时返回 `None`。**不要**只写 `if feature:` 就继续保存，

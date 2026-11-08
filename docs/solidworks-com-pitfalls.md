@@ -517,3 +517,12 @@ SW 先按 A 的绝对路径找零件；能不能回退到"装配体所在目录"
 不是边迭代器。误用会得到 0 条边且不报错，随后圆角因空选择集失败。
 正确：`descs, errors = iter_model_edges(model)`，再从 `d["edge"]` 取边。
 
+### 65. `GetPartBox` 对圆角实体偏大 ~0.1×R（2026-11-08）
+凸台上缘倒 R4/R4.5 后包围盒分别多 0.396/0.445 mm，但所有顶点都在设计范围内。
+含圆角件的包围盒验收留 ~0.1×R 余量，或用顶点/面范围复核，别误判为超差。
+
+### 66. `\\wsl.localhost` 路径大小写敏感（2026-11-08）
+`SaveAs(...\x.sldprt)` 实际落盘 `x.SLDPRT`；`os.path.exists(...\x.sldprt)` 为 False，
+`run_review(expected_outputs=...)` 因此误报 `expected_outputs_missing`。
+存在性检查用真实扩展名或用 `glob`；交付前核对磁盘上的文件名。
+
