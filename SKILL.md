@@ -118,6 +118,7 @@ with SolidWorksSession(version=2026) as session:
 | AutoCAD DWG/DXF 二维绘图、线稿转 CAD、批量改图 | `subskills/autocad-automation/scripts/acad_draw.py`、`subskills/autocad-automation/scripts/acad_review.py` | `subskills/autocad-automation/SKILL.md`、`subskills/autocad-automation/references/troubleshooting.md` |
 | 装配体操作、齿轮联动/铰链/可拖动运动配合 | `scripts/sw_assembly.py` | `references/assembly.md` |
 | 按图装配：等轴测图反推位姿、装配与图纸的视觉核对 | - | `references/figure-matching.md`、`docs/solidworks-com-pitfalls.md`（第 41–56 条） |
+| 三视图/投影图还原零件（凸台 + 型腔 + 同心鞍面） | `scripts/sw_part.py`、`scripts/sw_hole_features.create_semicircular_slot` | `references/part-modeling.md`（三视图还原章节）、`references/troubleshooting.md` |
 | 模型里看不到尺寸/点选只变蓝（显示开关诊断，交付文件保持关闭） | `scripts/sw_connect.save_document` | `references/troubleshooting.md`、`docs/solidworks-com-pitfalls.md`（第 53–57 条） |
 | Motion Study 运动算例、旋转马达与结果审计 | `scripts/sw_motion.py` | `references/motion-study.md`、`references/complex-mechanical-routing.md` |
 | 工程图出图 | `scripts/sw_drawing.py` | `references/drawing.md` |

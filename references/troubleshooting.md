@@ -728,6 +728,64 @@ edge.Select4(True, create_empty_dispatch_variant())      # 回退
 3. **返回值取错键**。`HoleFeatureEvidence.to_dict()` 的键是 `feature_names`（元组），
    没有 `status` / `feature_name`。写成 `result.get("status")` 会把成功的孔判成失败。
 
+### 跑道形草图切除没有生成（草图看着是闭合的）
+
+场景：2 条直线 + 2 段圆弧手绘的跑道形轮廓，草图在俯视图里显示正常，`FeatureCut4`
+之后特征树里没有切除、模型上也没有凹腔；再补一块实体后更难发现。2026-11-08 三视图座体
+在 SW2025 上连续两次出现（中面深度 112 / 400 都试过），同一套写法换到底部半圆拱又是成功的，
+根因未完全定位。
+
+处理：
+
+1. 跑道孔/槽优先用 `sw_hole_features.create_semicircular_slot(model, start, end, width, depth, plane_name)`，
+   它内部走 `sketch_slot` 的已验证路径。
+2. 必须手绘轮廓时，先在 20 mm 的最小样件上试切；切除后立刻查特征返回值 +
+   `collect_bounding_box`，再 `SaveBMP` 看俯视/等轴测，确认凹腔真的出现才进正式件。
+3. “草图看起来对”“视图里能看到草图线”都不是通过标准——可见的细线可能只是未消费的草图显示。
+
+### 中面切除深度是总深度，别只给一半
+
+场景：Top Plane 上画型腔，`FeatureCut4` 中面切 112 mm（±56 mm），零件高 72 mm，
+腔只切到 56，顶部 16 mm 把腔口封死。俯视图是整块、主视图也没有腔线，像“切除完全没有生效”。
+
+要点：
+
+1. 中面切的 `D1` 是**总深度**，两侧各一半；要么给 ≥ 零件在该方向最大尺寸的 2 倍，
+   要么用完全贯穿（`extrude_cut(..., depth=0)`）并确认方向朝向实体。
+2. 验收看**几何**：切前切后包围盒应一致；凡是“应当开口”的面，在对应方向的
+   `SaveBMP` 预览里必须能看见开口。
+
+### 圆弧凸向：起终点顺序 + direction 一起决定
+
+场景：半圆盘/半圆环补料，弧朝基准面下方鼓出，包围盒 Y 从 72 变成 100（正好多一个半径），
+模型底下多出一块。
+
+已验证（SW2025，Right Plane，草图 y = 全局 Y）：
+
+- `sketch_arc(0, 0, -R, 0, R, 0, direction=-1)` 向上（+Y）鼓，底部半圆拱成立；
+- 同一方向、把起终点对调（`R,0 → -R,0`）后鼓向变成向下。
+
+处理：
+
+1. 画弧时把“起点 → 终点 → 方向”当成一组参数记，不要只改顺序不改方向。
+2. 拉伸/补料后立即读包围盒：`Ymin` 必须仍为 0，`Ysize` 变大就是鼓反了。
+3. “先切穿再补壁”的鞍面类操作，补料轮廓先做最小样件验证；失败就退回
+   “切穿 + 用已验证的圆/半圆端槽重切”的组合，不要在一次正式件里连续试。
+
+### `iter_model_edges` 返回的是元组
+
+`sw_edge_select.iter_model_edges(model)` 返回 `(descriptors, errors)`，不是边迭代器：
+
+```python
+descs, errors = iter_model_edges(model)
+for d in descs:
+    mid = d.get("mid_point_mm")
+    edge = d["edge"]
+```
+
+当成 `for edge in iter_model_edges(...)` 用会得到 0 条边且不报错；后续 `fillet()`
+因选择集为空抛“圆角需要先选择边线”，容易误判成“模型里没有可选的边”。
+
 ### 特征返回值判空而不是判真
 
 SolidWorks 大多数特征 API 在失败时返回 `None`。**不要**只写 `if feature:` 就继续保存，
