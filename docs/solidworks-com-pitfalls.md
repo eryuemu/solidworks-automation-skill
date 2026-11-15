@@ -526,3 +526,54 @@ SW 先按 A 的绝对路径找零件；能不能回退到"装配体所在目录"
 `run_review(expected_outputs=...)` 因此误报 `expected_outputs_missing`。
 存在性检查用真实扩展名或用 `glob`；交付前核对磁盘上的文件名。
 
+### 67. `MathTransform.ArrayData` 直接赋 tuple 静默读错（2026-11-15）
+`transform.ArrayData = (16 个 double)` 会被 marshaling 成 `VT_ARRAY|VT_VARIANT`，SW 按错误步长读取
+（把旋转分量当成平移），组件位姿被设成单位阵/零平移且**不报错**。必须
+`transform.ArrayData = VARIANT(pythoncom.VT_ARRAY|pythoncom.VT_R8, list(data))`。
+`sw_assembly.apply_component_transform_x/_z` 已按此修复；写入后回读 `Transform2.ArrayData` 校验。
+
+### 68. `CreateSketchSlot` 的 Width 参数是**全宽**（2026-11-15）
+SW2025 SP5 实测：传 0.008 得到 **8 mm 宽**槽（不是 16）。`sw_part.sketch_slot` 的 `radius` 实为全宽；
+`sw_hole_features.create_semicircular_slot(width=0.016)` 内部传 `width/2=0.008` → 只得 8 mm 槽，
+Ø12 拨销进不去。要 16 mm 槽需传全宽 0.016。验收用切除体积 ≈ 槽面积×板厚 反推实际槽宽。
+
+### 69. `extrude_cut(depth=0)` 的 ThroughAll 在本机不真正贯穿（2026-11-15）
+SW2025 SP5 上 ThroughAll(1)/ThroughAllBoth(9) 在 12 mm 轮上只切约 5 mm（每槽只去 ~4100 mm³，应 ~8850）。
+要贯穿改用**中面切 T1=6、总深 ≥2×板厚**（如 40 mm）保证两侧切穿；切后核对体积或剖视。
+
+### 70. 轻化组件的干涉检查不可信（2026-11-15）
+"0 干涉"若在轻化/未解析状态测会**假阴性**，真实几何缺陷被漏掉。复验前确保组件完全解析
+（预载零件/确认 suppressed 状态与包围盒），再跑 `ToolsCheckInterference`；交付前在**全新会话**复核。
+
+### 71. 跨文件夹同名零件会话碰撞（2026-11-15）
+凸轮、槽轮各有一个 `frame.SLDPRT`。热会话残留 A 的 frame 时打开 B 装配，B 会复用 A 的 frame
+（同名文档），产生错误的几何/干涉。复验和打包前**逐文档 `CloseDoc(title)` 或重启 SW**，每个装配前清空文档。
+
+### 72. 新 SW 进程 SaveBMP 图形竞态（2026-11-15）
+taskkill 后新起实例紧接着逐帧 `SaveBMP`，个别组件可能不渲染（`GetBox`/`Visible` 都正常，像素里却缺件）；
+热实例正常。逐帧视频要么复用热实例，要么每帧做**像素守卫**（如红色像素计数 < 阈值即报错），
+不要只看 `SaveBMP` 返回 True。
+
+### 73. Motion 求解器无许可的空壳判定（2026-11-15）
+无 Motion 许可时 type 2/4 `Calculate=True` 但约 0.1 s 返回；`IMotionStudyResults.GetEulerAngles/GetCMPosition`
+返回**无类型信息、不可枚举的空壳 dispatch**（`GetTypeInfo` 失败），不是数值数组。判定求解器是否真出结果
+必须读角位移/角速度；`SetTime` 不更新位姿、真 CamMate(type 9) 崩 SW 2025。
+
+### 74. 一个脚本里两个 `SolidWorksSession` 会失败（2026-11-15）
+前一个 `with` 退出时 `quit_owned_instance` 关掉 SW，后一个立即连接报 `SW_INSTANCE_NOT_READY`。
+跨阶段流程（如"改写引用"→"最坏情况打开"）要**单个 Session 贯穿**。
+
+### 75. 装配体 `GetBox` 参数与组件不同（2026-11-15）
+`IModelDoc2.GetBox(False,False)` 报"无效的参数数目"；组件 `IComponent2.GetBox(False,False)` 正常。
+装配体整体包围盒改用各组件 GetBox 求并集。
+
+### 76. 参考图/指导书 .doc 提取：Word COM → 过滤 HTML（2026-11-15）
+`Word.Application` 打开 .doc，`SaveAs2(FileFormat=10)` 存过滤 HTML，图片落在 `*.files/`；HTML 是
+**GB2312/GB18030** 编码（UTF-8 读会乱码），按文本里的 `[[IMG:...]]` 顺序把图号对应到 PNG 再逐张看。
+WSL 的 libreoffice 可能已被清理，主机 Word COM 更稳。
+
+### 77. 交付件要按"参考形式"逐项核对，不能只求自洽/能跑（2026-11-15）
+本轮槽轮做成"细臂+完整圆盘"、凸轮做成偏心圆盘——功能自洽、0 干涉，但和指导书的标准形式
+（**锁止弧槽轮**：拨盘=锁止圆盘+凹口+拨臂+拨销，槽轮=四槽+四花瓣+槽间凹圆弧；**盘形凸轮**：闭环相切非圆轮廓）
+完全不同，被一眼否掉。结论：先看参考图确认机构形式，再建模；视觉自审要对照参考图逐特征比对。
+

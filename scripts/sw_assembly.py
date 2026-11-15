@@ -515,7 +515,8 @@ def build_transform_data_x(tx, ty, tz, angle_rad=0.0):
     @param ty Y 平移，单位米。
     @param tz Z 平移，单位米。
     @param angle_rad 绕 X 轴旋转角，单位弧度。
-    @return 16 元组，可赋给 MathTransform.ArrayData。
+    @return 16 元组；写入 MathTransform.ArrayData 时必须用 VT_ARRAY|VT_R8 编组，
+            直接赋 Python tuple 会被 marshaling 成 VT_VARIANT，SW 静默读错（位姿归零）。
     """
     c = math.cos(angle_rad)
     s = math.sin(angle_rad)
@@ -529,20 +530,38 @@ def build_transform_data_x(tx, ty, tz, angle_rad=0.0):
     )
 
 
-def apply_component_transform_x(component, tx, ty, tz, angle_rad=0.0):
+def build_transform_data_z(tx, ty, tz, angle_rad=0.0):
     """
-    @brief 基于组件现有 Transform2 修改位姿并触发装配求解。
-    @param component IComponent2 对象。
-    @param tx X 平移，单位米。
-    @param ty Y 平移，单位米。
-    @param tz Z 平移，单位米。
-    @param angle_rad 绕 X 轴旋转角，单位弧度。
-    @return True 表示 SetTransformAndSolve2 或 Transform2 赋值成功。
+    @brief 生成绕局部 Z 轴旋转并平移的 SolidWorks MathTransform 数组。
+    @return 16 元组；写入 ArrayData 的注意事项见 build_transform_data_x。
     """
+    c = math.cos(angle_rad)
+    s = math.sin(angle_rad)
+    return (
+        c, -s, 0.0,
+        s, c, 0.0,
+        0.0, 0.0, 1.0,
+        tx, ty, tz,
+        1.0,
+        0.0, 0.0, 0.0,
+    )
+
+
+def _set_transform_array(transform, data):
+    """@brief 用 VT_ARRAY|VT_R8 写入 ArrayData；失败再退回原始 tuple。"""
+    try:
+        transform.ArrayData = VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_R8, list(data))
+        return True
+    except Exception:
+        transform.ArrayData = data
+        return True
+
+
+def _apply_component_transform(component, data):
     transform = component.Transform2
     if transform is None:
         raise RuntimeError("组件没有可用 Transform2")
-    transform.ArrayData = build_transform_data_x(tx, ty, tz, angle_rad)
+    _set_transform_array(transform, data)
     try:
         if component.SetTransformAndSolve2(transform):
             return True
@@ -553,6 +572,29 @@ def apply_component_transform_x(component, tx, ty, tz, angle_rad=0.0):
         return True
     except Exception:
         return False
+
+
+def apply_component_transform_x(component, tx, ty, tz, angle_rad=0.0):
+    """
+    @brief 基于组件现有 Transform2 设置绕 X 轴旋转+平移并触发装配求解。
+    @param component IComponent2 对象。
+    @param tx X 平移，单位米。
+    @param ty Y 平移，单位米。
+    @param tz Z 平移，单位米。
+    @param angle_rad 绕 X 轴旋转角，单位弧度。
+    @return True 表示 SetTransformAndSolve2 或 Transform2 赋值成功。
+    """
+    return _apply_component_transform(
+        component, build_transform_data_x(tx, ty, tz, angle_rad))
+
+
+def apply_component_transform_z(component, tx, ty, tz, angle_rad=0.0):
+    """
+    @brief 基于组件现有 Transform2 设置绕 Z 轴旋转+平移并触发装配求解。
+    @return True 表示 SetTransformAndSolve2 或 Transform2 赋值成功。
+    """
+    return _apply_component_transform(
+        component, build_transform_data_z(tx, ty, tz, angle_rad))
 
 
 def iter_feature_tree(model, include_subfeatures=True):
