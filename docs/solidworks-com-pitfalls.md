@@ -577,3 +577,63 @@ WSL 的 libreoffice 可能已被清理，主机 Word COM 更稳。
 （**锁止弧槽轮**：拨盘=锁止圆盘+凹口+拨臂+拨销，槽轮=四槽+四花瓣+槽间凹圆弧；**盘形凸轮**：闭环相切非圆轮廓）
 完全不同，被一眼否掉。结论：先看参考图确认机构形式，再建模；视觉自审要对照参考图逐特征比对。
 
+### 78. 普通保存会把旧格式静默升级（2026-11-17）
+SW2025 打开 16000（2023 交付用的旧格式）装配体后，`Save3`/普通保存会把磁盘文件写成 18000：
+`VersionHistory` 末项从 `16000[2025/268]` 变为 `18000[2025/268]`，界面无提示。
+要求"保持 2023/旧版格式"的交付件，改完**不要再保存**；需要落盘时先确认格式，或按 #80 的流程处理。
+核验只用 `scripts/sw_version_guard.py --input <文件夹> --expect 16000`（只读 `ISldWorks::VersionHistory`，末项即当前格式）。
+
+### 79. `ISldWorks::ReplaceReferencedDocument` 要求父文档关闭、但不升格式（2026-11-17）
+父文档（装配体/图纸）处于打开状态时调用返回 `False` 且不抛异常；官方帮助写明
+"the document cannot be open"。全部文档关闭后逐条调用即可就地写回磁盘。
+实测对 16000 文件改引用后 `VersionHistory` 仍为 `16000[2025/268]`——**这个 API 不升格式**。
+注意它**不会**把新组件名写进文件：系统选项 `swExtRefUpdateCompNames`（"替换文档时更新组件名称"）开启时，
+重开只按新引用名临时显示，`GetSaveFlag=False` 不能证明名字已存盘；关掉该选项再开就会退回旧名。详见 #86。
+
+### 80. 保持旧格式的引用修复流程（2026-11-17）
+交付必须保持旧格式时：
+1) 从旧格式的原始/备份装配体出发，**先不要保存**；
+2) 确认所有相关文档已关闭，逐条 `ReplaceReferencedDocument(父文档, 旧引用, 新引用)`；
+3) 从磁盘重新打开核验（格式、树名、引用路径、配合健康、组件变换），全程不调用 `Save3`。
+若手上只有新格式文件，先用 `IAdvancedSaveAsOptions`（`SaveAllAsCopy=True`、`SaveAsPreviousVersion=16000`、
+`ModifyItemsNameAndPath` 重映射到**不同**目录）产出旧格式文件，再按第 2 步把引用改回目标路径。
+官方帮助明确：`SaveAsPreviousVersion` 必须配合 `ModifyItemsNameAndPath`，且新名称/路径不能与当前相同，
+否则会因"不允许覆盖同一文件"失败。
+
+### 81. `IComponent2.Name2` 写入的两个硬前提（2026-11-17）
+官方帮助：组件必须**先被选中**；且 `swExtRefUpdateCompNames` 为 `true` 时写入**直接失败**（为 `false` 才成功）。
+设置时传不带实例号的名字（`"小齿轮"`），读回会带实例号（`"小齿轮-1"`，SW2024+ 界面显示为 `小齿轮<1>`）；
+写入后必须保存才落盘，且保存会升格式——旧格式交付按 #86 的流程处理。
+
+### 82. pywin32 下成员"属性/方法"不统一（2026-11-17）
+同一 SW 会话里 `IModelDoc2.GetTitle` 是**属性**（`model.GetTitle()` 报 `'str' object is not callable`），
+而 `ISldWorks.GetDocuments`、`ISldWorks.VersionHistory` 是**方法**。统一走
+`get_com_member(obj, "成员名", *args)`，不要直接 `.Method()` 或 `for x in obj.Property`。
+
+### 83. 同名文件多处存在时，"看起来没改"先查打开路径（2026-11-17）
+旧审计目录与交付目录有同名装配体时，SW 的"最近打开"/跳转列表可能打开旧路径：窗口标题相同，
+树里仍是旧组件名。验收必须核对 `GetPathName` 或从磁盘绝对路径重开；已打开的旧窗口也不会因磁盘文件被替换而刷新。
+另外，树名"显示中文"不等于"文件里存了中文"，单看打开后的 `Name2`/截图不足以验收，见 #86。
+
+### 84. 交付包"最坏情况"可移植性实测（2026-11-17）
+复制整包到另一目录，对**副本**装配体把引用改成不存在的路径（`ReplaceReferencedDocument` 不检查
+`NewReference` 是否存在），关闭文档后重新打开：若组件仍解析到副本同目录，说明评审机解压后也能找到零件。
+本轮两套齿轮机构（16000 格式）通过，SolidWorks 会自动回退到装配体所在目录搜索同名零件。
+
+### 85. Windows 便携 Python 访问不了 `\\wsl.localhost`（2026-11-17）
+`C:\tools\dev-envs\python312\python.exe` 对 `\\wsl.localhost\Ubuntu\...` 的 `os.path.exists` 返回 `False`，
+无法把 WSL 仓库加入 `sys.path` 直接 import。把 `scripts/` 复制到 Windows 临时目录再运行（用完删除），
+或把仓库放到 Windows 侧；不要在 Git Bash 能访问就假设 Python 也能访问。
+
+### 86. 组件名"看起来改了"但没写进文件（偏好陷阱）（2026-11-17）
+`ReplaceReferencedDocument` 把引用改到 `小齿轮.SLDPRT` 后，若系统选项 `swExtRefUpdateCompNames` 开启，
+重开装配体会把组件显示成 `小齿轮-1`、`GetSaveFlag=False`，很容易误判为已改名。实测把该选项关掉再开，
+`Name2` 仍是旧的 `gear_small-1`——文件里存的还是英文。要真正落盘（同时保持 16000 旧格式）：
+1) 关闭该选项；
+2) 打开装配体，逐组件 `SelectByID2(comp.GetSelectByIDString(), "COMPONENT", ...)` 后 `comp.Name2 = "小齿轮"`（不带实例号）；
+3) 保存（会升到 18000），再用 `IAdvancedSaveAsOptions.SaveAsPreviousVersion=16000` + `ModifyItemsNameAndPath`
+   转回旧格式（`SaveAllAsCopy=True`，输出到不同目录）；
+4) 关闭文档后 `ReplaceReferencedDocument` 把引用改回目标零件（保持 16000 和已存名字）；
+5) **把 `swExtRefUpdateCompNames` 关掉重开**验收，再恢复原设置。
+本轮两套齿轮机构按此流程修复后，关闭偏好仍显示 `小齿轮<1>`/`齿轮<1>`。
+

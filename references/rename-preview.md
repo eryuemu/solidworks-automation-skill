@@ -37,3 +37,7 @@ python scripts/sw_rename_copy.py --plan C:\work\rename-plan.json --output-dir C:
 此命令与公差提取、孔位分析真机入口共用进程间互斥锁；其他客户端、旧命令和手动操作不受此锁保护，应避免同时修改或关闭正在读取的文档。
 
 实现方向参考社区贡献 [PR #36](https://github.com/wzyn20051216/solidworks-automation-skill/pull/36)。
+
+## 保持旧版本格式（pilot）
+
+交付要求保持旧格式（本机为 `16000`，SW2023 可打开）时，普通保存（`Save3`）会把文件静默升级为当前格式（实测 `16000` → `18000`）。安全做法：从旧格式备份装配体出发，**关闭所有文档**后用 `ISldWorks::ReplaceReferencedDocument` 改引用（该 API 不升格式），再从磁盘重开核验，全程不保存。只有新格式文件时，先用 `IAdvancedSaveAsOptions` 的 `SaveAllAsCopy=True` + `SaveAsPreviousVersion=16000` + `ModifyItemsNameAndPath` 转出旧格式副本，再把引用改回目标路径。改完用 `scripts/sw_version_guard.py --input <文件夹> --expect 16000` 只读核验 `VersionHistory` 末项；细节见 `docs/solidworks-com-pitfalls.md` #78–#80。注意 `ReplaceReferencedDocument` 只改引用、不写组件名：要让树名真正落盘且保持旧格式，需关闭 `swExtRefUpdateCompNames` → 逐组件设 `Name2` → 保存 → `SaveAsPreviousVersion` 转回 → 改回引用，最后**关闭该偏好重开**验收，见 #86。

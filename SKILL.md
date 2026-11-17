@@ -42,7 +42,7 @@ python SKILL_DIR/scripts/cad_studio.py doctor
 - 用户要求基准、复合公差框或 GD&T 自动落图时，读取 `subskills/solidworks-engineering-drawing/references/native-gdt.md`。已有图纸先用 `scripts/sw_gdt_copy.py --source 图纸.slddrw --inspect` 查明目标，再写新副本；从模型新出图使用现有 MCP `solidworks_generate_drawing` 或 `scripts/sw_drawing_package.py`，提供结构化尺寸、基本尺寸、基准及单框/复合框要求。SW2026 保存重开核验原生关联、全部层和基准材料修饰，源文件保留，结果需目视复核；旧自由文字不猜测落图。
 - 公共基准、子基准组、投影公差带、轮廓偏置、CZ/SZ、局部范围和其他高级 GD&T，继续读取 `subskills/solidworks-engineering-drawing/references/gdt-extended-options.md`，通过同一工具提交结构化成员与 `options`；每个成员都须核对，写入后保存重开核验全部新语义。
 - 要提取已保存模型的已显示尺寸公差时，使用 `scripts/sw_tolerance_extract.py`；它只读当前配置，结果不覆盖隐藏尺寸或其他配置，角度、装配和图纸读取仍需验证。
-- 需要按属性批量改名时，先用 `scripts/sw_file_rename.py` 生成只读预览；受限独立零件可用 `scripts/sw_rename_copy.py`，单配置嵌套装配可用 `scripts/sw_assembly_rename.py` 在新目录创建副本并重开核验。源文件及外部使用位置不改；图纸、Toolbox、多配置及其他未验证引用仍受阻断，详见 `references/rename-preview.md`。
+- 需要按属性批量改名时，先用 `scripts/sw_file_rename.py` 生成只读预览；受限独立零件可用 `scripts/sw_rename_copy.py`，单配置嵌套装配可用 `scripts/sw_assembly_rename.py` 在新目录创建副本并重开核验。源文件及外部使用位置不改；图纸、Toolbox、多配置及其他未验证引用仍受阻断，详见 `references/rename-preview.md`。若交付要求保持旧版本格式（如 16000），普通保存会静默升级格式，改引用请按 `docs/solidworks-com-pitfalls.md` #78–#80 的流程，并用 `scripts/sw_version_guard.py` 从磁盘只读核验；组件树名要真正写盘还需关闭 `swExtRefUpdateCompNames` 后设 `Name2`，见 #86。
 - 需要链轮外观或几何演示时，读取 `references/sprocket.md` 并使用 `scripts/sw_sprocket.py` 在新建空零件中创建近似实体；此模型未验证链条啮合或制造要求，不能作为生产级标准链轮。
 - 需要开放端等螺距圆线弹簧实体时，读取 `references/spring.md` 并使用 `scripts/sw_spring.py`；输入高度是螺旋中心线轴向行程而非实体自由高度，材料、端部和工程性能必须复核。
 - 无头写入使用 `scripts/headless_cad_writer.py`；OCCT/OCP 隔离进程真实写入 STEP、IGES、BREP、STL、OBJ、GLB，二维后端写入 DXF、SVG、PDF、PNG，并生成几何与 SHA-256 证据。
@@ -116,6 +116,7 @@ with SolidWorksSession(version=2026) as session:
 | 友好会话 API | `scripts/sw_session.py` | - |
 | 连接与文档管理 | `scripts/sw_connect.py` | - |
 | 外观与材质 | `scripts/sw_appearance.py` | `references/appearance.md` |
+| 交付格式版本核验（保持旧版） | `scripts/sw_version_guard.py` | `docs/solidworks-com-pitfalls.md` #78–#80 |
 | 零件建模（草图+特征） | `scripts/sw_part.py` | `references/part-modeling.md` |
 | 标准外啮合直齿轮实体 | `scripts/sw_gear.py` | `references/gears.md` |
 | 盲孔/沉孔/沉头孔/半圆端槽与孔位验收 | `scripts/sw_hole_features.py`、`scripts/sw_review.py` | `references/complex-hole-features.md`、`references/review.md` |
