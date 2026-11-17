@@ -604,6 +604,8 @@ SW2025 打开 16000（2023 交付用的旧格式）装配体后，`Save3`/普通
 官方帮助：组件必须**先被选中**；且 `swExtRefUpdateCompNames` 为 `true` 时写入**直接失败**（为 `false` 才成功）。
 设置时传不带实例号的名字（`"小齿轮"`），读回会带实例号（`"小齿轮-1"`，SW2024+ 界面显示为 `小齿轮<1>`）；
 写入后必须保存才落盘，且保存会升格式——旧格式交付按 #86 的流程处理。
+选中组件优先用 `IComponent2::Select4(False, SelectionMgr.CreateSelectData(), False)`（C# 实测稳定）；
+pywin32 里 `Extension.SelectByID2(..., None, ...)` 的 Callout 参数会报"类型不匹配"，改用 `Select4` 或传空 dispatch VARIANT。
 
 ### 82. pywin32 下成员"属性/方法"不统一（2026-11-17）
 同一 SW 会话里 `IModelDoc2.GetTitle` 是**属性**（`model.GetTitle()` 报 `'str' object is not callable`），
@@ -636,4 +638,10 @@ SW2025 打开 16000（2023 交付用的旧格式）装配体后，`Save3`/普通
 4) 关闭文档后 `ReplaceReferencedDocument` 把引用改回目标零件（保持 16000 和已存名字）；
 5) **把 `swExtRefUpdateCompNames` 关掉重开**验收，再恢复原设置。
 本轮两套齿轮机构按此流程修复后，关闭偏好仍显示 `小齿轮<1>`/`齿轮<1>`。
+
+### 87. 从 Git Bash 经 `wsl.exe` 传中文路径会被编码破坏（2026-11-17）
+在 Git Bash 里跑 `wsl.exe -d Ubuntu -- bash -lc '...含中文路径...'`，中文参数按 GBK 传进去、WSL bash 按 UTF-8 解释：
+变量赋值可能变空，`mkdir -p "$DST/工具"` 实际去建 `/工具`，`ls` 报路径不存在；文件本身没坏，但命令指错位置。
+含中文路径的批量操作改用 UTF-8 脚本文件（先写到 WSL 再 `python3 /home/.../x.py`），或在 Git Bash 里直接用
+`//wsl.localhost/Ubuntu/home/.../中文目录`；不要把长中文路径塞进 `bash -lc` 的参数字符串。
 
